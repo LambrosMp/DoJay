@@ -86,7 +86,7 @@
                     <span class="badge bg-primary bg-opacity-25 text-info border border-info border-opacity-25 px-2 py-1" data-i18n="active_stage">
                         Active Stage
                     </span>
-                   <span class="text-light text-opacity-75 small">Created {{ selected_room.created_at.strftime('%Y-%m-%d') }}</span>
+                    <span class="text-light text-opacity-75 small">Created {{ selected_room.created_at[:10] }}</span>
                 </div>
 
                 <h2 class="h4 text-white fw-bold mb-1">{{ selected_room.name }}</h2>

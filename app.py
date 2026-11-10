@@ -108,8 +108,15 @@ def after_request(response):
     return response
 
 
-# Connect to SQLite database
-db = SQL("postgresql://neondb_owner:npg_loSOMK7De4kN@ep-red-cell-berd34rb.c-9.us-east-2.aws.neon.tech/neondb?sslmode=require")
+# Connect to PostgreSQL database
+DATABASE_URL = os.environ.get(
+    "DATABASE_URL",
+    "postgresql://neondb_owner:npg_loSOMK7De4kN@ep-red-cell-berd34rb.c-9.us-east-2.aws.neon.tech/neondb?sslmode=require"
+)
+if DATABASE_URL.startswith("postgresql://") and not DATABASE_URL.startswith("postgresql+"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
+
+db = SQL(DATABASE_URL)
 
 def init_db():
     """Ensure database schema and indexes exist."""
@@ -147,6 +154,7 @@ def init_db():
     db.execute("CREATE INDEX IF NOT EXISTS idx_rooms_unique_code ON rooms(unique_code)")
     db.execute("CREATE INDEX IF NOT EXISTS idx_rooms_dj_id ON rooms(dj_id)")
     db.execute("CREATE INDEX IF NOT EXISTS idx_requests_room_status ON requests(room_id, status, timestamp)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_requests_guest_id ON requests(guest_id)")
 
 
 init_db()
@@ -202,12 +210,13 @@ def register():
             return render_template("register.html")
 
         password_hash = generate_password_hash(password)
-        user_id = db.execute(
-            "INSERT INTO users (username, hash, role) VALUES (?, ?, ?)",
+        result = db.execute(
+            "INSERT INTO users (username, hash, role) VALUES (?, ?, ?) RETURNING id",
             username,
             password_hash,
             role,
         )
+        user_id = result[0]["id"] if isinstance(result, list) and result else result
 
         session["user_id"] = user_id
         session["username"] = username
@@ -342,12 +351,13 @@ def create_room():
         flash("Could not generate a unique room code. Please try again.", "danger")
         return redirect("/dj_dashboard")
 
-    room_id = db.execute(
-        "INSERT INTO rooms (dj_id, name, unique_code) VALUES (?, ?, ?)",
+    result = db.execute(
+        "INSERT INTO rooms (dj_id, name, unique_code) VALUES (?, ?, ?) RETURNING id",
         session["user_id"],
         name,
         unique_code,
     )
+    room_id = result[0]["id"] if isinstance(result, list) and result else result
 
     flash(f"Room '{name}' created with code {unique_code}.", "success")
     return redirect(f"/dj_dashboard?room_id={room_id}")
@@ -461,7 +471,7 @@ def room_view(unique_code):
 
         # Anti-Spam Rate Limiting: 1 request every 3 minutes (180 seconds) per room
         recent_request = db.execute("""
-            SELECT (strftime('%s', 'now') - strftime('%s', timestamp)) AS diff
+            SELECT EXTRACT(EPOCH FROM (NOW() - timestamp)) AS diff
             FROM requests
             WHERE room_id = ? AND guest_id = ?
             ORDER BY timestamp DESC
@@ -492,10 +502,12 @@ def room_view(unique_code):
             flash("Someone has already requested this track. It's currently in the DJ's queue!", "warning")
             return redirect(f"/room/{unique_code}")
 
-        new_req_id = db.execute("""
+        result = db.execute("""
             INSERT INTO requests (room_id, guest_id, song_title, artist, status)
             VALUES (?, ?, ?, ?, 'pending')
+            RETURNING id
         """, room["id"], session["user_id"], song_title, artist)
+        new_req_id = result[0]["id"] if isinstance(result, list) and result else result
 
         # Broadcast real-time WebSocket event to DJ console
         try:
@@ -515,7 +527,7 @@ def room_view(unique_code):
 
     # Check if guest has pending requests in this room
     my_pending = db.execute("""
-        SELECT song_title, artist, strftime('%H:%M', timestamp) AS time_str
+        SELECT song_title, artist, TO_CHAR(timestamp, 'HH24:MI') AS time_str
         FROM requests
         WHERE room_id = ? AND guest_id = ? AND status = 'pending'
         ORDER BY timestamp ASC
@@ -547,7 +559,7 @@ def get_room_requests(unique_code):
             r.song_title,
             r.artist,
             r.status,
-            strftime('%H:%M:%S', r.timestamp) AS time_str,
+            TO_CHAR(r.timestamp, 'HH24:MI:SS') AS time_str,
             r.timestamp,
             u.username AS guest_name
         FROM requests r
@@ -573,7 +585,7 @@ def get_room_played(unique_code):
             r.id,
             r.song_title,
             r.artist,
-            strftime('%H:%M', r.timestamp) AS time_str,
+            TO_CHAR(r.timestamp, 'HH24:MI') AS time_str,
             u.username AS guest_name
         FROM requests r
         JOIN users u ON r.guest_id = u.id
