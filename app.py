@@ -115,7 +115,7 @@ def init_db():
     """Ensure database schema and indexes exist."""
     db.execute("""
         CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+            id SERIAL PRIMARY KEY,
             username TEXT NOT NULL UNIQUE,
             hash TEXT NOT NULL,
             role TEXT NOT NULL CHECK(role IN ('dj', 'guest'))
@@ -123,23 +123,23 @@ def init_db():
     """)
     db.execute("""
         CREATE TABLE IF NOT EXISTS rooms (
-            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+            id SERIAL PRIMARY KEY,
             dj_id INTEGER NOT NULL,
             name TEXT NOT NULL,
             unique_code TEXT NOT NULL UNIQUE,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (dj_id) REFERENCES users(id) ON DELETE CASCADE
         )
     """)
     db.execute("""
         CREATE TABLE IF NOT EXISTS requests (
-            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+            id SERIAL PRIMARY KEY,
             room_id INTEGER NOT NULL,
             guest_id INTEGER NOT NULL,
             song_title TEXT NOT NULL,
             artist TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'played')),
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE CASCADE,
             FOREIGN KEY (guest_id) REFERENCES users(id) ON DELETE CASCADE
         )
