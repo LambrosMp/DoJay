@@ -1,0 +1,789 @@
+{% extends "layout.html" %}
+
+{% block title %}
+    DJ Control Room &bull; DoJay
+{% endblock %}
+
+{% block main %}
+<div class="row g-4">
+
+    <!-- Top Bar: Title & Room Selector / Create Button -->
+    <div class="col-12">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 pb-3 border-bottom border-secondary border-opacity-25">
+            <div>
+                <h1 class="h3 fw-bold text-white mb-1">
+                    <i class="bi bi-soundwave text-warning me-2"></i> <span data-i18n="dj_control_room">DJ Control Room</span>
+                </h1>
+                <p class="text-light text-opacity-75 small mb-0" data-i18n="dj_desc">
+                    Manage event stages, display room QR codes, and curate incoming crowd requests in real-time.
+                </p>
+            </div>
+
+            <div class="d-flex align-items-center gap-2">
+                {% if not selected_room %}
+                    <!-- Create Room Trigger (Only displayed if DJ has zero active rooms) -->
+                    <button type="button" class="btn btn-dojay-primary btn-sm d-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#createRoomModal">
+                        <i class="bi bi-plus-circle"></i> <span data-i18n="create_room">Create Room</span>
+                    </button>
+                {% else %}
+                    <!-- Close Room Trigger (Moved to top right header, taking Create Room's exact spot) -->
+                    <button type="button" class="btn btn-outline-danger btn-sm d-flex align-items-center gap-1" data-bs-toggle="modal" data-bs-target="#closeRoomModal" title="Close Room">
+                        <i class="bi bi-x-circle"></i> <span data-i18n="close_room">Close Room</span>
+                    </button>
+
+                    <!-- Real-Time Status Indicator (Cleaned without 'WS') -->
+                    <div class="live-indicator ms-2" id="liveIndicator" title="Real-Time Active">
+                        <span class="pulse-dot"></span>
+                        <span id="liveStatusText" data-i18n="live_queue">LIVE QUEUE</span>
+                    </div>
+
+                    <!-- Force Refresh -->
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="btnManualRefresh" title="Refresh Live Queue">
+                        <i class="bi bi-arrow-clockwise" id="refreshIcon"></i>
+                    </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {% if not selected_room %}
+        <!-- Empty State: DJ hasn't created a room yet -->
+        <div class="col-12">
+            <div class="card dojay-card p-5 text-center my-4">
+                <i class="bi bi-broadcast display-3 text-warning mb-3"></i>
+                <h2 class="h4 text-white fw-bold mb-2" data-i18n="no_rooms_title">No Active Event Rooms</h2>
+                <p class="text-light text-opacity-75 max-w-md mx-auto mb-4" style="max-width: 500px;" data-i18n="no_rooms_desc">
+                    Create your first room (e.g. "Main Stage", "VIP Lounge", or "Afterparty") to generate a live QR code and start accepting crowd requests.
+                </p>
+                <div>
+                    <button type="button" class="btn btn-dojay-primary px-4 py-2" data-bs-toggle="modal" data-bs-target="#createRoomModal">
+                        <i class="bi bi-plus-lg me-1"></i> <span data-i18n="create_first_room">Create Your First Room</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    {% else %}
+
+        <!-- Left Column: Stage Info & QR Code -->
+        <div class="col-12 col-lg-4">
+            <div class="card dojay-card p-4 text-center mb-4">
+
+                <!-- Room Selector Dropdown if multiple rooms exist -->
+                {% if rooms|length > 1 %}
+                    <div class="mb-3 text-start">
+                        <label class="form-label small text-light text-opacity-75" data-i18n="switch_room">Switch Active Room</label>
+                        <select class="form-select form-select-sm" onchange="window.location.href='/dj_dashboard?room_id=' + this.value">
+                            {% for r in rooms %}
+                                <option value="{{ r.id }}" {% if r.id == selected_room.id %}selected{% endif %}>
+                                    {{ r.name }} (Code: {{ r.unique_code }})
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                {% endif %}
+
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <span class="badge bg-primary bg-opacity-25 text-info border border-info border-opacity-25 px-2 py-1" data-i18n="active_stage">
+                        Active Stage
+                    </span>
+                    <span class="text-light text-opacity-75 small">Created {{ selected_room.created_at[:10] }}</span>
+                </div>
+
+                <h2 class="h4 text-white fw-bold mb-1">{{ selected_room.name }}</h2>
+                <p class="text-light text-opacity-75 small mb-3" data-i18n="share_code_qr">Share this code or QR code with guests</p>
+
+                <!-- Room Code & Copy Button (Cleaned: Open Room deleted, Close Room moved to header) -->
+                <div class="mb-4">
+                    <div class="room-code-badge" id="roomCodeText">{{ selected_room.unique_code }}</div>
+                    <div class="mt-2 d-flex flex-wrap justify-content-center gap-1">
+                        <button class="btn btn-outline-secondary btn-sm" id="btnCopyCode" data-code="{{ selected_room.unique_code }}">
+                            <i class="bi bi-clipboard me-1"></i> <span data-i18n="copy_code">Copy Code</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Generated Base64 QR Code -->
+                <div class="mb-3">
+                    <div class="qr-container">
+                        {% if qr_code %}
+                            <img src="data:image/png;base64,{{ qr_code }}" alt="Room Join QR Code" class="qr-image img-fluid mx-auto">
+                        {% else %}
+                            <div class="p-4 text-dark small" data-i18n="qr_unavailable">QR Code unavailable</div>
+                        {% endif %}
+                    </div>
+                </div>
+                <small class="text-light text-opacity-75 d-block" data-i18n="qr_scan_notice">Guests scan this QR to open the live request portal</small>
+
+                <!-- Direct Link Display -->
+                <div class="mt-3 p-2 bg-dark rounded border border-secondary border-opacity-25 small text-truncate">
+                    <a href="{{ room_url }}" class="text-info text-decoration-none" target="_blank">{{ room_url }}</a>
+                </div>
+            </div>
+
+            <!-- Stage Metrics -->
+            <div class="row g-2">
+                <div class="col-6">
+                    <div class="stat-card">
+                        <div class="stat-number text-warning" id="pendingCounter">{{ pending_count }}</div>
+                        <div class="stat-label text-light text-opacity-75" data-i18n="stat_in_queue">In Queue</div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="stat-card">
+                        <div class="stat-number text-success" id="playedCounter">{{ played_count }}</div>
+                        <div class="stat-label text-light text-opacity-75" data-i18n="stat_played">Played</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Live Request Feed -->
+        <div class="col-12 col-lg-8">
+            <div class="card dojay-card p-3 p-md-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h2 class="h5 fw-bold text-white mb-0">
+                        <i class="bi bi-music-note-list text-warning me-2"></i> <span data-i18n="incoming_requests">Incoming Song Requests</span>
+                    </h2>
+                    <span class="badge bg-dark border border-secondary text-light text-opacity-75" id="queueTimestamp" data-i18n="updated_now">
+                        Updated just now
+                    </span>
+                </div>
+
+                <!-- Live Container -->
+                <div id="requestsContainer">
+                    <div class="text-center py-5 text-light text-opacity-75" id="initialLoadingState">
+                        <div class="spinner-border text-primary mb-2" role="status"></div>
+                        <div data-i18n="connecting_feed">Connecting to live booth feed...</div>
+                    </div>
+                </div>
+
+                <!-- Empty State Template -->
+                <div class="empty-queue d-none" id="emptyQueueState">
+                    <i class="bi bi-disc empty-queue-icon d-block text-secondary text-opacity-75"></i>
+                    <h3 class="h5 text-white fw-bold mb-2" data-i18n="queue_clear">Queue is Clear</h3>
+                    <p class="text-light text-opacity-75 small mb-0" data-i18n="queue_clear_desc">
+                        No pending requests in this room right now. Display the QR code for attendees to start requesting tracks.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+    {% endif %}
+
+</div>
+
+<!-- Modal: Create New Room -->
+<div class="modal fade" id="createRoomModal" tabindex="-1" aria-labelledby="createRoomModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content dojay-card p-2">
+            <div class="modal-header border-bottom border-secondary border-opacity-25">
+                <h5 class="modal-title text-white fw-bold" id="createRoomModalLabel">
+                    <i class="bi bi-broadcast text-warning me-2"></i> <span data-i18n="modal_create_title">Create Event Room</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="/dj/create_room" method="POST">
+                <div class="modal-body py-4">
+                    <div class="mb-3">
+                        <label for="room_name" class="form-label text-white" data-i18n="modal_room_name">Room / Stage Name</label>
+                        <input
+                            type="text"
+                            class="form-control"
+                            id="room_name"
+                            name="name"
+                            placeholder="e.g. Main Stage, Rooftop Lounge, Wedding Reception"
+                            data-i18n-placeholder="modal_room_placeholder"
+                            maxlength="60"
+                            required
+                            autofocus
+                        >
+                        <div class="form-text text-light text-opacity-75" data-i18n="modal_room_hint">
+                            A unique room code and scannable QR code will be generated automatically.
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-top border-secondary border-opacity-25">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" data-i18n="cancel">Cancel</button>
+                    <button type="submit" class="btn btn-dojay-primary" data-i18n="generate_room">Generate Room</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% if selected_room %}
+<!-- Modal: Close Room Custom Bootstrap Confirmation -->
+<div class="modal fade" id="closeRoomModal" tabindex="-1" aria-labelledby="closeRoomModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content dojay-card p-2 border border-danger border-opacity-50 shadow-lg">
+            <div class="modal-header border-bottom border-secondary border-opacity-25">
+                <h5 class="modal-title text-danger fw-bold" id="closeRoomModalLabel">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i> <span data-i18n="close_room_modal_title">Close Room</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body py-4">
+                <p class="text-white fs-6 mb-3" data-i18n="close_room_confirm_msg">
+                    Are you sure you want to close this room? This will end the session and delete all requests.
+                </p>
+                <div class="p-3 bg-dark rounded border border-secondary border-opacity-25">
+                    <span class="text-light text-opacity-75 small d-block mb-1" data-i18n="room_to_close">Room to close:</span>
+                    <strong class="text-white fs-5">{{ selected_room.name }}</strong>
+                    <span class="badge bg-secondary ms-2 font-monospace">#{{ selected_room.unique_code }}</span>
+                </div>
+            </div>
+            <div class="modal-footer border-top border-secondary border-opacity-25">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" data-i18n="cancel">Cancel</button>
+                <form action="/dj/close_room" method="POST" class="d-inline m-0">
+                    <input type="hidden" name="room_id" value="{{ selected_room.id }}">
+                    <button type="submit" class="btn btn-danger fw-semibold">
+                        <i class="bi bi-trash3 me-1"></i> <span data-i18n="confirm_close_btn">Confirm & Close Room</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if selected_room %}
+<!-- Socket.IO Client Library -->
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<!-- SortableJS for Drag-and-Drop Queue Reordering -->
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+<script>
+/**
+ * DoJay DJ Control Panel Engine
+ * Features:
+ * 1. Real-time WebSocket synchronization (Flask-SocketIO) + 5s polling fallback.
+ * 2. Drag & Drop Queue Reordering with SortableJS and persistent local state sorting.
+ * 3. Robust button event handling for "Mark as Played" and "Reject (X)".
+ */
+document.addEventListener("DOMContentLoaded", () => {
+    const roomCode = "{{ selected_room.unique_code }}";
+    const requestsContainer = document.getElementById("requestsContainer");
+    const emptyQueueState = document.getElementById("emptyQueueState");
+    const pendingCounter = document.getElementById("pendingCounter");
+    const playedCounter = document.getElementById("playedCounter");
+    const queueTimestamp = document.getElementById("queueTimestamp");
+    const btnManualRefresh = document.getElementById("btnManualRefresh");
+    const refreshIcon = document.getElementById("refreshIcon");
+    const liveIndicator = document.getElementById("liveIndicator");
+    const liveStatusText = document.getElementById("liveStatusText");
+    const btnCopyCode = document.getElementById("btnCopyCode");
+
+    let knownRequestIds = new Set();
+    let isFirstLoad = true;
+    let isDragging = false;
+    let pendingRenderRequests = null;
+    let sortableInstance = null;
+
+    // Local custom order state (array of request IDs in the DJ's desired order)
+    let customOrderIds = [];
+    try {
+        const savedOrder = localStorage.getItem(`dojay_custom_order_${roomCode}`);
+        if (savedOrder) {
+            const parsed = JSON.parse(savedOrder);
+            if (Array.isArray(parsed)) {
+                customOrderIds = parsed.map(x => parseInt(x, 10)).filter(x => !isNaN(x));
+            }
+        }
+    } catch (e) {
+        console.warn("Could not load saved queue order:", e);
+        customOrderIds = [];
+    }
+
+    // Connect to Flask-SocketIO WebSocket server
+    const socket = io();
+
+    socket.on("connect", () => {
+        console.log("WebSocket connected. Subscribing to stage room:", roomCode);
+        socket.emit("join_room", { room: roomCode });
+        if (liveStatusText) liveStatusText.textContent = "LIVE QUEUE";
+        if (liveIndicator) {
+            liveIndicator.style.borderColor = "rgba(16, 185, 129, 0.4)";
+            liveIndicator.title = "Real-Time Active";
+        }
+    });
+
+    socket.on("disconnect", () => {
+        console.warn("WebSocket disconnected.");
+        if (liveStatusText) liveStatusText.textContent = "RECONNECTING...";
+        if (liveIndicator) liveIndicator.style.borderColor = "rgba(239, 68, 68, 0.4)";
+    });
+
+    // Real-time WebSocket event listeners
+    socket.on("new_request", (data) => {
+        console.log("WebSocket [new_request] received:", data);
+        fetchRequests();
+    });
+
+    socket.on("request_played", (data) => {
+        console.log("WebSocket [request_played] received:", data);
+        fetchRequests();
+    });
+
+    socket.on("request_rejected", (data) => {
+        console.log("WebSocket [request_rejected] received:", data);
+        fetchRequests();
+    });
+
+    // Copy room code button handler
+    if (btnCopyCode) {
+        btnCopyCode.addEventListener("click", () => {
+            const code = btnCopyCode.getAttribute("data-code");
+            navigator.clipboard.writeText(code).then(() => {
+                btnCopyCode.innerHTML = '<i class="bi bi-check2"></i> Copied!';
+                setTimeout(() => {
+                    btnCopyCode.innerHTML = '<i class="bi bi-clipboard me-1"></i> Copy Code';
+                }, 2000);
+            });
+        });
+    }
+
+    /**
+     * Fetch requests for the selected room
+     */
+    async function fetchRequests() {
+        if (refreshIcon) refreshIcon.classList.add("bi-spin");
+
+        try {
+            const response = await fetch(`/api/room/${roomCode}/requests`, {
+                method: "GET",
+                headers: { "Accept": "application/json" }
+            });
+
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+            const requests = await response.json();
+            
+            // If the user is actively dragging an item, defer rendering until drag ends
+            if (isDragging) {
+                pendingRenderRequests = requests;
+                return;
+            }
+
+            renderRequests(requests);
+
+            liveStatusText.textContent = "LIVE QUEUE";
+            liveIndicator.style.borderColor = "rgba(16, 185, 129, 0.3)";
+            queueTimestamp.textContent = `Updated ${new Date().toLocaleTimeString()}`;
+
+        } catch (error) {
+            console.error("Queue fetch error:", error);
+            liveStatusText.textContent = "CONNECTING...";
+            liveIndicator.style.borderColor = "rgba(239, 68, 68, 0.4)";
+        } finally {
+            if (refreshIcon) refreshIcon.classList.remove("bi-spin");
+        }
+    }
+
+    /**
+     * Update the rank badges (#1, #2, #3, ...) based on the current DOM order
+     */
+    function updateQueueBadges() {
+        if (!requestsContainer) return;
+        const cards = requestsContainer.querySelectorAll(".request-item");
+        cards.forEach((card, idx) => {
+            const badge = card.querySelector(".queue-rank-badge");
+            if (badge) {
+                badge.textContent = `#${idx + 1}`;
+            }
+        });
+    }
+
+    /**
+     * Initialize or re-initialize SortableJS on the requests container
+     */
+    function initSortable() {
+        if (typeof Sortable === "undefined" || !requestsContainer) return;
+
+        if (sortableInstance) {
+            sortableInstance.destroy();
+            sortableInstance = null;
+        }
+
+        sortableInstance = new Sortable(requestsContainer, {
+            animation: 160,
+            handle: ".drag-handle",
+            ghostClass: "sortable-ghost",
+            chosenClass: "sortable-chosen",
+            dragClass: "sortable-drag",
+            filter: "button, .btn, a, input",
+            preventOnFilter: false,
+            onStart: function () {
+                isDragging = true;
+            },
+            onEnd: function () {
+                isDragging = false;
+
+                // Read new custom order directly from DOM
+                const cards = Array.from(requestsContainer.querySelectorAll(".request-item"));
+                customOrderIds = cards
+                    .map(c => parseInt(c.getAttribute("data-request-id"), 10))
+                    .filter(id => !isNaN(id));
+
+                try {
+                    localStorage.setItem(`dojay_custom_order_${roomCode}`, JSON.stringify(customOrderIds));
+                } catch (e) {
+                    console.warn("Failed to persist queue order:", e);
+                }
+
+                // Immediately refresh the rank numbers in UI
+                updateQueueBadges();
+
+                // If any fetch completed while dragging, process it now
+                if (pendingRenderRequests) {
+                    const pending = pendingRenderRequests;
+                    pendingRenderRequests = null;
+                    renderRequests(pending);
+                }
+            }
+        });
+    }
+
+    /**
+     * Render the pending requests into the feed.
+     * Enforces the DJ's custom order state so polls never overwrite manual reordering.
+     */
+    function renderRequests(requests) {
+        if (!requests) requests = [];
+
+        // Build Map of incoming requests by ID
+        const incomingMap = new Map();
+        requests.forEach(r => incomingMap.set(r.id, r));
+
+        // 1. Prune customOrderIds of tracks that are no longer pending (e.g. marked played or rejected)
+        customOrderIds = customOrderIds.filter(id => incomingMap.has(id));
+
+        // 2. Append any brand new incoming requests to the end of customOrderIds
+        requests.forEach(r => {
+            if (!customOrderIds.includes(r.id)) {
+                customOrderIds.push(r.id);
+            }
+        });
+
+        // 3. Persist pruned and updated order
+        try {
+            localStorage.setItem(`dojay_custom_order_${roomCode}`, JSON.stringify(customOrderIds));
+        } catch (e) {}
+
+        // 4. Sort requests array strictly according to customOrderIds
+        const sortedRequests = [];
+        customOrderIds.forEach(id => {
+            if (incomingMap.has(id)) {
+                sortedRequests.push(incomingMap.get(id));
+            }
+        });
+
+        // Fallback safety: ensure any request not yet processed is included
+        requests.forEach(r => {
+            if (!sortedRequests.some(s => s.id === r.id)) {
+                sortedRequests.push(r);
+            }
+        });
+
+        // Update queue counter
+        if (pendingCounter) {
+            pendingCounter.textContent = sortedRequests.length;
+        }
+
+        // Empty state check
+        if (sortedRequests.length === 0) {
+            requestsContainer.innerHTML = "";
+            emptyQueueState.classList.remove("d-none");
+            knownRequestIds.clear();
+            isFirstLoad = false;
+            return;
+        }
+
+        emptyQueueState.classList.add("d-none");
+
+        // Build request items HTML
+        let html = "";
+        const currentBatchIds = new Set(sortedRequests.map(r => r.id));
+
+        sortedRequests.forEach((req, index) => {
+            const isNew = !isFirstLoad && !knownRequestIds.has(req.id);
+            const timeDisplay = req.time_str || "Just now";
+
+            html += `
+                <div class="request-item ${isNew ? 'new-arrival' : ''}" id="request-card-${req.id}" data-request-id="${req.id}">
+                    <div class="d-flex align-items-center gap-2 gap-sm-3">
+                        <!-- Drag Handle -->
+                        <div class="drag-handle d-flex align-items-center justify-content-center text-secondary text-opacity-50" title="Drag to reorder queue">
+                            <i class="bi bi-grip-vertical fs-5"></i>
+                        </div>
+
+                        <!-- Rank Badge -->
+                        <span class="badge bg-secondary rounded-pill fs-6 px-3 py-2 text-white queue-rank-badge">
+                            #${index + 1}
+                        </span>
+
+                        <div>
+                            <div class="request-song text-white">${escapeHtml(req.song_title)}</div>
+                            <div class="text-light text-opacity-75 small fw-medium mb-1">${escapeHtml(req.artist)}</div>
+                            <div class="request-meta">
+                                <span class="badge-guest">
+                                    <i class="bi bi-person me-1"></i>${escapeHtml(req.guest_name)}
+                                </span>
+                                <span class="text-light text-opacity-75 small">
+                                    <i class="bi bi-clock me-1"></i>${escapeHtml(timeDisplay)}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="d-flex align-items-center gap-2">
+                            <!-- Mark Played Button -->
+                            <button
+                                type="button"
+                                class="btn btn-dojay-success btn-mark-played d-flex align-items-center gap-1"
+                                data-id="${req.id}"
+                                title="Mark as played"
+                            >
+                                <i class="bi bi-check-lg"></i>
+                                <span class="d-none d-sm-inline" data-i18n="mark_played">${window.i18n ? window.i18n.t("mark_played") : "Mark Played"}</span>
+                            </button>
+
+                            <!-- Reject Button -->
+                            <button
+                                type="button"
+                                class="btn btn-outline-danger btn-reject d-flex align-items-center p-2"
+                                data-id="${req.id}"
+                                title="${window.i18n ? window.i18n.t("reject") : "Reject"}"
+                            >
+                                <i class="bi bi-x-lg"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+
+        requestsContainer.innerHTML = html;
+
+        if (window.i18n) {
+            window.i18n.applyTranslations(window.i18n.getLanguage(), requestsContainer);
+        }
+
+        // Attach click listeners to "Mark Played" buttons
+        requestsContainer.querySelectorAll(".btn-mark-played").forEach(btn => {
+            btn.addEventListener("click", function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                const id = this.getAttribute("data-id");
+                markAsPlayed(id, this);
+            });
+        });
+
+        // Attach click listeners to "Reject" buttons
+        requestsContainer.querySelectorAll(".btn-reject").forEach(btn => {
+            btn.addEventListener("click", function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                const id = this.getAttribute("data-id");
+                rejectRequest(id, this);
+            });
+        });
+
+        // Re-initialize SortableJS on freshly rendered items
+        initSortable();
+
+        knownRequestIds = currentBatchIds;
+        isFirstLoad = false;
+    }
+
+    // Delegated click listener on requestsContainer as an extra layer of event safety
+    requestsContainer.addEventListener("click", (e) => {
+        const playBtn = e.target.closest(".btn-mark-played");
+        if (playBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            const id = playBtn.getAttribute("data-id");
+            if (id) markAsPlayed(id, playBtn);
+            return;
+        }
+
+        const rejectBtn = e.target.closest(".btn-reject");
+        if (rejectBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            const id = rejectBtn.getAttribute("data-id");
+            if (id) rejectRequest(id, rejectBtn);
+            return;
+        }
+    });
+
+    /**
+     * Mark request as played
+     */
+    async function markAsPlayed(id, buttonElement = null) {
+        if (!id) return;
+
+        const btn = buttonElement || document.querySelector(`.btn-mark-played[data-id="${id}"]`);
+        if (btn) {
+            if (btn.disabled) return;
+            btn.disabled = true;
+            btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
+        }
+
+        try {
+            const response = await fetch("/api/played", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json"
+                },
+                body: JSON.stringify({ id: parseInt(id, 10) || id })
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.success) {
+                const card = document.getElementById(`request-card-${id}`);
+                if (card) {
+                    card.style.transition = "all 0.3s ease";
+                    card.style.opacity = "0";
+                    card.style.transform = "translateX(30px)";
+
+                    setTimeout(() => {
+                        card.remove();
+                        knownRequestIds.delete(parseInt(id, 10));
+                        customOrderIds = customOrderIds.filter(orderId => orderId !== parseInt(id, 10));
+                        try {
+                            localStorage.setItem(`dojay_custom_order_${roomCode}`, JSON.stringify(customOrderIds));
+                        } catch (e) {}
+
+                        if (data.pending_count !== undefined && pendingCounter) pendingCounter.textContent = data.pending_count;
+                        if (data.played_count !== undefined && playedCounter) playedCounter.textContent = data.played_count;
+
+                        updateQueueBadges();
+
+                        if (requestsContainer.children.length === 0) {
+                            emptyQueueState.classList.remove("d-none");
+                        }
+                    }, 300);
+                }
+            } else {
+                alert(data.error || "Unable to update request status.");
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = `<i class="bi bi-check-lg"></i> <span class="d-none d-sm-inline">${window.i18n ? window.i18n.t("mark_played") : "Mark Played"}</span>`;
+                }
+            }
+        } catch (error) {
+            console.error("markAsPlayed error:", error);
+            alert("Network error updating request.");
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = `<i class="bi bi-check-lg"></i> <span class="d-none d-sm-inline">${window.i18n ? window.i18n.t("mark_played") : "Mark Played"}</span>`;
+            }
+        }
+    }
+
+    /**
+     * Reject (delete) request
+     */
+    async function rejectRequest(id, buttonElement = null) {
+        if (!id) return;
+
+        const btn = buttonElement || document.querySelector(`.btn-reject[data-id="${id}"]`);
+        if (btn) {
+            if (btn.disabled) return;
+            btn.disabled = true;
+            btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
+        }
+
+        try {
+            const response = await fetch("/api/reject", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json"
+                },
+                body: JSON.stringify({ id: parseInt(id, 10) || id })
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.success) {
+                const card = document.getElementById(`request-card-${id}`);
+                if (card) {
+                    card.style.transition = "all 0.3s ease";
+                    card.style.opacity = "0";
+                    card.style.transform = "translateX(-30px)";
+
+                    setTimeout(() => {
+                        card.remove();
+                        knownRequestIds.delete(parseInt(id, 10));
+                        customOrderIds = customOrderIds.filter(orderId => orderId !== parseInt(id, 10));
+                        try {
+                            localStorage.setItem(`dojay_custom_order_${roomCode}`, JSON.stringify(customOrderIds));
+                        } catch (e) {}
+
+                        if (data.pending_count !== undefined && pendingCounter) pendingCounter.textContent = data.pending_count;
+
+                        updateQueueBadges();
+
+                        if (requestsContainer.children.length === 0) {
+                            emptyQueueState.classList.remove("d-none");
+                        }
+                    }, 300);
+                }
+            } else {
+                alert(data.error || "Unable to reject request.");
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = `<i class="bi bi-x-lg"></i>`;
+                }
+            }
+        } catch (error) {
+            console.error("rejectRequest error:", error);
+            alert("Network error updating request.");
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = `<i class="bi bi-x-lg"></i>`;
+            }
+        }
+    }
+
+    // Expose markAsPlayed and rejectRequest globally
+    window.markAsPlayed = markAsPlayed;
+    window.rejectRequest = rejectRequest;
+
+    function escapeHtml(str) {
+        if (!str) return "";
+        return String(str)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    if (btnManualRefresh) {
+        btnManualRefresh.addEventListener("click", fetchRequests);
+    }
+
+    // Initial load fetch
+    fetchRequests();
+
+    // Resilient 5-second polling loop in tandem with WebSockets
+    const pollingInterval = setInterval(fetchRequests, 5000);
+
+    // Clean up on navigate away
+    window.addEventListener("beforeunload", () => {
+        clearInterval(pollingInterval);
+        if (socket && socket.connected) {
+            socket.emit("leave_room", { room: roomCode });
+            socket.disconnect();
+        }
+    });
+});
+</script>
+{% endif %}
+{% endblock %}

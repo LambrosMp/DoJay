@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}DoJay - Live Venue Song Curation SaaS{% endblock %}</title>
+
+    <!-- Google Fonts: Outfit & Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+    <!-- DoJay Custom CSS -->
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+
+    <!-- Professional SaaS Navigation Bar -->
+    <nav class="navbar navbar-expand-lg navbar-dark navbar-dojay sticky-top">
+        <div class="container">
+            <a class="navbar-brand d-flex align-items-center" href="/">
+                <i class="bi bi-disc-fill brand-icon"></i>
+                <span class="brand-text">DoJay</span>
+            </a>
+
+            <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#dojayNav" aria-controls="dojayNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse" id="dojayNav">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    {% if session.get("user_id") %}
+                        {% if session.get("role") == "dj" %}
+                            <li class="nav-item">
+                                <a class="nav-link {% if request.path == '/dj_dashboard' %}active{% endif %}" href="/dj_dashboard">
+                                    <i class="bi bi-speedometer2 me-1"></i> <span data-i18n="nav_dj_control">DJ Control Room</span>
+                                </a>
+                            </li>
+                        {% elif session.get("role") == "guest" %}
+                            <li class="nav-item">
+                                <a class="nav-link {% if request.path == '/guest_dashboard' %}active{% endif %}" href="/guest_dashboard">
+                                    <i class="bi bi-grid me-1"></i> <span data-i18n="nav_event_rooms">Event Rooms</span>
+                                </a>
+                            </li>
+                        {% endif %}
+                    {% endif %}
+                </ul>
+
+                <ul class="navbar-nav ms-auto mb-2 mb-lg-0 align-items-lg-center">
+                    {% if session.get("user_id") %}
+                        <li class="nav-item me-lg-2">
+                            <span class="badge bg-secondary bg-opacity-50 py-2 px-3 text-light border border-secondary border-opacity-25">
+                                {% if session.get("role") == "dj" %}
+                                    <i class="bi bi-vinyl-fill text-warning me-1"></i> DJ {{ session.get("username") }}
+                                {% else %}
+                                    <i class="bi bi-person-fill text-info me-1"></i> {{ session.get("username") }}
+                                {% endif %}
+                            </span>
+                        </li>
+                        <li class="nav-item">
+                            <a class="btn btn-outline-danger btn-sm px-3 mt-2 mt-lg-0" href="/logout">
+                                <i class="bi bi-box-arrow-right me-1"></i> <span data-i18n="nav_sign_out">Sign Out</span>
+                            </a>
+                        </li>
+                    {% else %}
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.path == '/login' %}active{% endif %}" href="/login">
+                                <span data-i18n="nav_sign_in">Sign In</span>
+                            </a>
+                        </li>
+                        <li class="nav-item ms-lg-2">
+                            <a class="btn btn-dojay-primary btn-sm px-3 mt-2 mt-lg-0" href="/register">
+                                <span data-i18n="nav_get_started">Get Started</span>
+                            </a>
+                        </li>
+                    {% endif %}
+
+                    <!-- Language Toggle Button (English / Greek) -->
+                    <li class="nav-item ms-lg-2 mt-2 mt-lg-0">
+                        <button type="button" id="langToggleBtn" class="btn btn-outline-secondary btn-sm px-2 py-1 d-flex align-items-center gap-1 border-opacity-50 text-light" title="Toggle Language / Αλλαγή Γλώσσας" aria-label="Toggle Language">
+                            <span id="langFlag" style="font-size: 1.15rem; line-height: 1;">🇬🇧</span>
+                            <span id="langCode" class="small fw-bold">EN</span>
+                        </button>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Flash Notifications -->
+    <div class="container mt-3">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show d-flex align-items-center shadow-sm" role="alert">
+                        {% if category == 'success' %}
+                            <i class="bi bi-check-circle-fill me-2 fs-5"></i>
+                        {% elif category == 'danger' %}
+                            <i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i>
+                        {% elif category == 'warning' %}
+                            <i class="bi bi-exclamation-circle-fill me-2 fs-5"></i>
+                        {% else %}
+                            <i class="bi bi-info-circle-fill me-2 fs-5"></i>
+                        {% endif %}
+                        <div class="flex-grow-1">{{ message }}</div>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+    </div>
+
+    <!-- Page Body -->
+    <main class="container my-4">
+        {% block main %}{% endblock %}
+    </main>
+
+    <!-- Commercial Footer -->
+    <footer class="py-4 text-center mt-auto">
+        <div class="container">
+            <p class="mb-1 text-secondary" data-i18n="footer_copyright" data-i18n-html="true">
+                &copy; 2026 <strong>DoJay.</strong> All rights reserved.
+            </p>
+            <p class="mb-0 text-muted small" data-i18n="footer_desc">
+                Enterprise real-time crowd music curation for venues, festivals, and performers.
+            </p>
+        </div>
+    </footer>
+
+    <!-- Bootstrap 5 JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Client-side Translations Engine -->
+    <script src="/static/translations.js"></script>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

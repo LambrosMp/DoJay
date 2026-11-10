@@ -1,0 +1,109 @@
+{% extends "layout.html" %}
+
+{% block title %}
+    Request a Song &bull; DoJay
+{% endblock %}
+
+{% block main %}
+<div class="row justify-content-center">
+    <div class="col-12 col-md-8 col-lg-6">
+
+        <!-- Hero Header -->
+        <div class="text-center mb-4">
+            <div class="d-inline-flex p-3 rounded-circle mb-3" style="background: rgba(139, 92, 246, 0.15); border: 1px solid rgba(139, 92, 246, 0.3);">
+                <i class="bi bi-music-note-list fs-1 text-primary" style="color: var(--accent-purple) !important;"></i>
+            </div>
+            <h1 class="h2 fw-bold text-white mb-2">Request a Track</h1>
+            <p class="text-secondary small">
+                Got a banger you need to hear? Put it directly on the DJ's live screen.
+            </p>
+        </div>
+
+        <!-- Request Submission Card -->
+        <div class="card dojay-card p-4 p-md-5 mb-4">
+            <form action="/" method="POST" id="requestForm">
+                
+                <!-- Guest Name Input -->
+                <div class="mb-4">
+                    <label for="guest_name" class="form-label">
+                        <i class="bi bi-person-fill me-1 text-primary" style="color: var(--accent-cyan) !important;"></i> 
+                        Your Name / Table / Nickname
+                    </label>
+                    <input 
+                        type="text" 
+                        class="form-control form-control-lg" 
+                        id="guest_name" 
+                        name="guest_name" 
+                        placeholder="e.g. Alex, VIP Booth 4, or Birthday Crew" 
+                        autocomplete="name" 
+                        maxlength="60" 
+                        required 
+                        autofocus
+                    >
+                    <div class="form-text text-muted">
+                        So the DJ can shout you out when your song drops!
+                    </div>
+                </div>
+
+                <!-- Song Information Input -->
+                <div class="mb-4">
+                    <label for="song_info" class="form-label">
+                        <i class="bi bi-disc me-1 text-primary" style="color: var(--accent-purple) !important;"></i> 
+                        Song Title & Artist
+                    </label>
+                    <input 
+                        type="text" 
+                        class="form-control form-control-lg" 
+                        id="song_info" 
+                        name="song_info" 
+                        placeholder="e.g. Dua Lipa - Levitating (or Remix)" 
+                        maxlength="150" 
+                        required
+                    >
+                    <div class="form-text text-muted">
+                        Include artist name, title, or specific remix requests.
+                    </div>
+                </div>
+
+                <!-- Submit Button -->
+                <div class="d-grid mt-4">
+                    <button type="submit" class="btn btn-dojay-primary btn-lg d-flex align-items-center justify-content-center py-3">
+                        <i class="bi bi-send-fill me-2"></i> Submit Song Request
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- How It Works / Aux Rules Card -->
+        <div class="card dojay-card p-3 p-md-4 text-secondary small">
+            <h6 class="text-white fw-bold mb-3 d-flex align-items-center">
+                <i class="bi bi-info-circle me-2 text-info"></i> How it Works
+            </h6>
+            <div class="row g-2 text-start">
+                <div class="col-4 text-center">
+                    <div class="p-2 rounded bg-dark mb-1">
+                        <i class="bi bi-phone fs-4 text-info"></i>
+                    </div>
+                    <span class="d-block text-white fw-semibold">1. Send</span>
+                    <span class="text-muted" style="font-size: 0.75rem;">Type your song</span>
+                </div>
+                <div class="col-4 text-center">
+                    <div class="p-2 rounded bg-dark mb-1">
+                        <i class="bi bi-tv fs-4 text-warning"></i>
+                    </div>
+                    <span class="d-block text-white fw-semibold">2. Live Queue</span>
+                    <span class="text-muted" style="font-size: 0.75rem;">DJ sees it instantly</span>
+                </div>
+                <div class="col-4 text-center">
+                    <div class="p-2 rounded bg-dark mb-1">
+                        <i class="bi bi-headphones fs-4 text-success"></i>
+                    </div>
+                    <span class="d-block text-white fw-semibold">3. Vibe</span>
+                    <span class="text-muted" style="font-size: 0.75rem;">Wait for the beat</span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
