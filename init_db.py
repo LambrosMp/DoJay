@@ -12,9 +12,11 @@ def init_database():
 
     db_url = os.environ.get(
         "DATABASE_URL",
-        "postgresql://neondb_owner:npg_loSOMK7De4kN@ep-red-cell-berd34rb.c-9.us-east-2.aws.neon.tech/neondb?sslmode=require"
+        "postgresql://neondb_owner:npg_loSOMK7De4kN@ep-red-cell-berd34rb-pooler.c-9.us-east-2.aws.neon.tech/neondb?sslmode=require"
     )
-    if db_url.startswith("postgresql://") and not db_url.startswith("postgresql+"):
+    if db_url.startswith("postgres://"):
+        db_url = db_url.replace("postgres://", "postgresql+psycopg2://", 1)
+    elif db_url.startswith("postgresql://") and not db_url.startswith("postgresql+"):
         db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
 
     db = SQL(db_url)

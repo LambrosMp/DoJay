@@ -68,15 +68,10 @@ app = Flask(__name__)
 # Secret key for session signing
 app.secret_key = os.environ.get("SECRET_KEY", "dojay-commercial-saas-platform-key-2026")
 
-# Configure session cookies
+# Configure stateless signed cookie sessions (robust for Render's ephemeral filesystem)
 app.config["SESSION_PERMANENT"] = False
-
-try:
-    from flask_session import Session
-    app.config["SESSION_TYPE"] = "filesystem"
-    Session(app)
-except ImportError:
-    pass
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 # Initialize SocketIO for real-time WebSocket communication
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
@@ -108,12 +103,14 @@ def after_request(response):
     return response
 
 
-# Connect to PostgreSQL database
+# Connect to PostgreSQL database (Neon connection pooler)
 DATABASE_URL = os.environ.get(
     "DATABASE_URL",
     "postgresql://neondb_owner:npg_loSOMK7De4kN@ep-red-cell-berd34rb-pooler.c-9.us-east-2.aws.neon.tech/neondb?sslmode=require"
 )
-if DATABASE_URL.startswith("postgresql://") and not DATABASE_URL.startswith("postgresql+"):
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg2://", 1)
+elif DATABASE_URL.startswith("postgresql://") and not DATABASE_URL.startswith("postgresql+"):
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
 
 db = SQL(DATABASE_URL)
