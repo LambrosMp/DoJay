@@ -111,7 +111,7 @@ def after_request(response):
 # Connect to PostgreSQL database
 DATABASE_URL = os.environ.get(
     "DATABASE_URL",
-    "postgresql://neondb_owner:npg_loSOMK7De4kN@ep-red-cell-berd34rb.c-9.us-east-2.aws.neon.tech/neondb?sslmode=require"
+    "postgresql://neondb_owner:npg_loSOMK7De4kN@ep-red-cell-berd34rb-pooler.c-9.us-east-2.aws.neon.tech/neondb?sslmode=require"
 )
 if DATABASE_URL.startswith("postgresql://") and not DATABASE_URL.startswith("postgresql+"):
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
